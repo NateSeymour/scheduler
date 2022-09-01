@@ -1,0 +1,4 @@
+[submodule "lib/tomlplusplus"]
+    shallow = true
+	path = lib/tomlplusplus
+	url = https://github.com/marzer/tomlplusplus.git
