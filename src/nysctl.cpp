@@ -1,0 +1,6 @@
+#include "nysctl.h"
+
+int main()
+{
+    return 0;
+}

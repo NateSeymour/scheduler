@@ -58,17 +58,11 @@ public:
         this->LogTagStream(std::cerr, this->tag, fmt, args...);
     }
 
+    Logger() = delete;
+
     Logger(const char *tag, const std::filesystem::path& log_path) : tag(tag)
     {
         log_file.open(log_path, std::ios::app | std::ios::out);
-    }
-
-    ~Logger()
-    {
-        if(log_file.is_open())
-        {
-            log_file.close();
-        }
     }
 };
 

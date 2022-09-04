@@ -8,6 +8,7 @@
 #include <thread>
 #include <cerrno>
 #include <cstring>
+#include <cmath>
 #include "Agent.h"
 
 namespace fs = std::filesystem;
@@ -203,6 +204,11 @@ int Agent::RunUnit(std::shared_ptr<Unit> unit)
         freopen(unit_log_path.c_str(), "a", stdout);
         freopen(unit_log_path.c_str(), "a", stderr);
 
+        // Set working directory
+        fs::path working_directory = this->mission.base / "workspace" / unit->name;
+        fs::create_directories(working_directory);
+        fs::current_path(working_directory);
+
         // Launch Unit
         logger->LogTag(unit->name.c_str(), "Launching...");
 
@@ -226,7 +232,11 @@ void Agent::LowPriorityRunner()
 
         auto next_task = this->low_priority_queue.ConsumeNext();
 
-        lplog.Log("Next task is Unit `%s`. There are %u task(s) in queue.", next_task.unit->name.c_str(), this->low_priority_queue.Count());
+        auto time_until_next = next_task.scheduled_time - chrono::system_clock::now();
+        auto time_in_minutes = chrono::duration_cast<chrono::duration<double, std::ratio<60>>>(time_until_next);
+        double round_time_in_minutes = std::round(time_in_minutes.count() * 1000.0) / 1000.0;
+
+        lplog.Log("Next task is Unit `%s`. It will run in %.1f minutes. There are %u task(s) in queue.", next_task.unit->name.c_str(), round_time_in_minutes, this->low_priority_queue.Count());
 
         /*
          * Here we grab a mutex lock and wait on the condition variable.

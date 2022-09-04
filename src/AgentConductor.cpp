@@ -24,6 +24,7 @@ void AgentConductor::SetupNysDirectory() const
     AgentConductor::VerifyMakeOrFailDirectory(this->launch_parameters.home_directory / ".nys" / "schedule");
     AgentConductor::VerifyMakeOrFailDirectory(this->launch_parameters.home_directory / ".nys" / "log");
     AgentConductor::VerifyMakeOrFailDirectory(this->launch_parameters.home_directory / ".nys" / "scripts");
+    AgentConductor::VerifyMakeOrFailDirectory(this->launch_parameters.home_directory / ".nys" / "workspace");
 }
 
 void AgentConductor::Setup()

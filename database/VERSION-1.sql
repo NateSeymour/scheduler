@@ -6,7 +6,7 @@ CREATE TABLE Units (
 );
 
 CREATE TABLE MissionHistory (
-    UnitId INTEGER NOT NULL,
-    TimeExecuted INTEGER NOT NULL,
-    ExitCode INTEGER NOT NULL
+    UnitId integer NOT NULL,
+    TimeExecuted integer NOT NULL,
+    ExitCode integer NOT NULL
 );

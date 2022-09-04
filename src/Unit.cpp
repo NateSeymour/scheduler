@@ -11,5 +11,5 @@ using namespace std::chrono;
  */
 time_point<system_clock> Unit::NextTrigger(time_point<system_clock> previous)
 {
-
+    return system_clock::now() + 30s;
 }
