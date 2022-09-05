@@ -10,12 +10,10 @@ protected:
     TriggerParser parser;
 };
 
-TEST_F(TriggerParserFixture, SimpleInterval)
+TEST_F(TriggerParserFixture, SimpleDurationInterval)
 {
-    time_point<system_clock> start_time;
+    time_point<system_clock> start_time = std::chrono::system_clock::now();
     time_point<system_clock> trigger_time;
-
-    start_time = std::chrono::system_clock::now();
 
     trigger_time = this->parser.Parse("every 10 minutes", start_time);
     ASSERT_TRUE(trigger_time == start_time + 10min);
@@ -31,4 +29,22 @@ TEST_F(TriggerParserFixture, SimpleInterval)
 
     trigger_time = this->parser.Parse("every 1 minute", start_time);
     ASSERT_TRUE(trigger_time == start_time + 1min);
+}
+
+TEST_F(TriggerParserFixture, SimpleInterval)
+{
+    time_point<system_clock> start_time = std::chrono::system_clock::now();
+    time_point<system_clock> trigger_time;
+
+    trigger_time = this->parser.Parse("every second", start_time);
+    ASSERT_TRUE(trigger_time == start_time + 1s);
+
+    trigger_time = this->parser.Parse("every minute", start_time);
+    ASSERT_TRUE(trigger_time == start_time + 1min);
+
+    trigger_time = this->parser.Parse("every hour", start_time);
+    ASSERT_TRUE(trigger_time == start_time + 1h);
+
+    trigger_time = this->parser.Parse("every day", start_time);
+    ASSERT_TRUE(trigger_time == start_time + days(1));
 }

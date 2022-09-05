@@ -1,5 +1,10 @@
 #include "TriggerParser.h"
 
+TriggerParser::system_time_point TriggerParser::NextTrigger(const std::shared_ptr<Unit> &unit)
+{
+    return this->Parse(unit->trigger, unit->last_executed);
+}
+
 /**
  * Program
  *  : StatementList
@@ -24,7 +29,8 @@ TriggerParser::Parse(const std::string &trigger, TriggerParser::system_time_poin
 
 /**
  * Statement
- *  : KEYWORD_EVERY integer interval
+ *  : EveryInterval
+ *  ;
  */
 void TriggerParser::Statement()
 {
@@ -32,7 +38,31 @@ void TriggerParser::Statement()
     {
         case KEYWORD_EVERY:
         {
-            this->Eat(KEYWORD_EVERY);
+            this->EveryInterval();
+            break;
+        }
+
+        default:
+        {
+            throw std::runtime_error("Parsing failed!");
+        }
+    }
+}
+
+/**
+ * EveryInterval
+ *  : KEYWORD_EVERY integer interval
+ *  : KEYWORD_EVERY interval
+ *  ;
+ */
+void TriggerParser::EveryInterval()
+{
+    this->Eat(KEYWORD_EVERY);
+
+    switch(this->lookahead->type)
+    {
+        case integer:
+        {
             auto interval_duration = this->Eat(integer);
             auto interval_period = this->Eat(interval);
 
@@ -43,12 +73,22 @@ void TriggerParser::Statement()
             break;
         }
 
+        case interval:
+        {
+            auto interval_period = this->Eat(interval);
+            auto period_as_seconds = std::chrono::seconds(*interval_period->As<TOKEN_INTEGER>());
+
+            this->calculated_trigger = this->previous_trigger + period_as_seconds;
+            break;
+        }
+
         default:
         {
             throw std::runtime_error("Parsing failed!");
         }
     }
 }
+
 
 std::unique_ptr<Token> TriggerParser::Eat(TokenType type)
 {

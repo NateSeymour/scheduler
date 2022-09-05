@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <string>
 #include "Tokenizer.h"
+#include "../Unit.h"
 
 class TriggerParser
 {
@@ -20,10 +21,11 @@ private:
 
     std::unique_ptr<Token> Eat(TokenType type);
 
-    void StatementList();
     void Statement();
+    void EveryInterval();
 
 public:
+    system_time_point NextTrigger(const std::shared_ptr<Unit>& unit);
     system_time_point Parse(const std::string& parse_trigger, system_time_point previous);
 };
 

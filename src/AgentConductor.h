@@ -5,11 +5,14 @@
 #include <filesystem>
 #include "LaunchEnvironment.h"
 #include "Agent.h"
+#include "Logger.h"
 
 class AgentConductor
 {
 private:
     LaunchEnvironment launch_parameters;
+
+    std::unique_ptr<Logger> logger;
 
     static void VerifyMakeOrFailDirectory(const std::filesystem::path& path);
     void SetupNysDirectory() const;
@@ -19,7 +22,7 @@ private:
 public:
     void Setup();
 
-    Agent NewAgent();
+    void RunAgent();
     explicit AgentConductor(LaunchEnvironment launch_parameters) : launch_parameters(std::move(launch_parameters)) {}
 };
 

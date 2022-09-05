@@ -10,11 +10,16 @@
 #include "Unit.h"
 #include "Logger.h"
 #include "ScheduledTaskQueue.h"
+#include "parser/TriggerParser.h"
+#include "AgentConductor.h"
+
 
 class Agent
 {
 private:
     AgentMission mission;
+
+    TriggerParser trigger_parser;
 
     sqlite3 *database = nullptr;
     int database_version = -1;
@@ -25,8 +30,8 @@ private:
 
     ScheduledTaskQueue low_priority_queue;
 
-    void LowPriorityRunner();
-    int RunUnit(std::shared_ptr<Unit> unit);
+    [[noreturn]] void LowPriorityRunner();
+    int RunTask(const ScheduledTask& task);
     void UpdateDatabase();
     void LoadUnits();
     void Cleanup();

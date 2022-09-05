@@ -1,5 +1,3 @@
-#include <exception>
-#include <iostream>
 #include <cstdlib>
 #include "AgentConductor.h"
 #include "LaunchEnvironment.h"
@@ -12,11 +10,5 @@ int main(int argc, const char **argv)
 
     AgentConductor conductor(launch_environment);
     conductor.Setup();
-
-    try {
-        conductor.NewAgent().Run();
-    } catch(std::exception& e) {
-        std::cerr << "Agent has encountered an exception:\n" << std::endl;
-        std::cerr << e.what() << std::endl;
-    }
+    conductor.RunAgent();
 }

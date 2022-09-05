@@ -24,7 +24,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(tomlplusplus)
 
 # Copy supporting files
-file(COPY database DESTINATION .)
+configure_file(database/database.toml database/database.toml COPYONLY)
+configure_file(database/VERSION-1.sql database/VERSION-1.sql COPYONLY)
 
 # parser
 add_library(libnys
@@ -36,7 +37,6 @@ add_library(libnys
         src/AgentConductor.h
         src/AgentMission.h
         src/Unit.h
-        src/Unit.cpp
         src/ScheduledTaskQueue.cpp
         src/ScheduledTaskQueue.h
         src/ScheduledTask.cpp

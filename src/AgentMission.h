@@ -2,8 +2,10 @@
 #define NOT_YOUR_SCHEDULER_AGENTMISSION_H
 
 #include <filesystem>
+#include "Logger.h"
 
-struct AgentMission {
+struct AgentMission
+{
     std::filesystem::path base;
     std::filesystem::path binary;
 };

@@ -1,12 +1,12 @@
 PRAGMA user_version = 1;
 
-CREATE TABLE Units (
-    Name TEXT NOT NULL,
-    Hash TEXT NOT NULL
-);
-
 CREATE TABLE MissionHistory (
-    UnitId integer NOT NULL,
-    TimeExecuted integer NOT NULL,
-    ExitCode integer NOT NULL
+    UnitName TEXT,
+    UnitHash TEXT,
+    UnitTrigger TEXT,
+    UnitDescription TEXT,
+    ScheduledTimeESEC INT,
+    TimeExecutedESEC INT,
+    RunTimeMS INT,
+    ExitCode INT
 );

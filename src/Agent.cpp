@@ -128,6 +128,12 @@ void Agent::LoadUnits()
 
         unit->exec = unit_table.at_path("unit.exec").as_string()->get();
 
+        if(unit->exec == "")
+        {
+            logger->Error("WARN Unable to resolve the exec path `%s` for Unit `%s`. Skipping...", unit->exec.c_str(), unit->name.c_str());
+            continue;
+        }
+
         // Resolve the exec command to scripts if it is not in path
         if(!fs::exists(unit->exec))
         {
@@ -149,6 +155,15 @@ void Agent::LoadUnits()
             continue;
         }
 
+        // Trigger
+        if(!unit_table.at_path("unit.trigger").is_string())
+        {
+            logger->Error("WARN Unit `%s` does not have a `trigger` defined. Skipping...", unit->name.c_str());
+            continue;
+        }
+
+        unit->trigger = unit_table.at_path("unit.trigger").as_string()->get();
+
         // Args
         if(unit_table.at_path("unit.args").is_array())
         {
@@ -166,14 +181,74 @@ void Agent::LoadUnits()
             unit->description = unit_table.at_path("unit.description").as_string()->get();
         }
 
+        // Check database for last ran time
+        sqlite3_stmt *last_run = nullptr;
+        sqlite3_prepare_v2(this->database, "SELECT ScheduledTimeESEC, TimeExecutedESEC FROM MissionHistory WHERE UnitName = ? ORDER BY TimeExecutedESEC DESC;", -1, &last_run, nullptr);
+
+        sqlite3_bind_text(last_run, 1, unit->name.c_str(), -1, SQLITE_STATIC);
+
+        switch(sqlite3_step(last_run))
+        {
+            case SQLITE_ROW:
+            {
+                sqlite3_int64 scheduled_time_esecs = sqlite3_column_int64(last_run, 0);
+                sqlite3_int64 time_executed_esecs = sqlite3_column_int64(last_run, 1);
+
+                sqlite3_finalize(last_run);
+
+                int64_t last_run_esecs = 0;
+
+                switch(unit->scheduling_behavior)
+                {
+                    case BATCH:
+                    {
+                        last_run_esecs = time_executed_esecs;
+                        break;
+                    }
+
+                    case STRICT:
+                    {
+                        last_run_esecs = scheduled_time_esecs;
+                        break;
+                    }
+                }
+
+                if(last_run_esecs != 0)
+                {
+                    unit->last_executed = chrono::sys_seconds(chrono::seconds(last_run_esecs));
+                }
+                else
+                {
+                    unit->last_executed = chrono::system_clock::now();
+                }
+                break;
+            }
+
+            case SQLITE_DONE:
+            {
+                unit->last_executed = chrono::system_clock::now();
+                break;
+            }
+
+            default:
+            {
+                throw std::runtime_error("Database issues!");
+            }
+        }
+
         this->units.push_back(unit);
     }
 }
 
-int Agent::RunUnit(std::shared_ptr<Unit> unit)
+int Agent::RunTask(const ScheduledTask& task)
 {
-    logger->Log("Starting unit `%s` (%s)...", unit->name.c_str(), unit->description.c_str());
+    logger->Log("Starting unit `%s` (%s)...", task.unit->name.c_str(), task.unit->description.c_str());
 
+    /*
+     * Here we start two clocks. The sysclock is for logging and documentation purposes.
+     * The steady clock is more reliable for measuring code execution time.
+     */
+    auto sysclock_start = chrono::system_clock::now();
     auto clock_start = chrono::steady_clock::now();
 
     pid_t child_pid = fork();
@@ -190,45 +265,105 @@ int Agent::RunUnit(std::shared_ptr<Unit> unit)
 
         int exit_status = WEXITSTATUS(stat_loc);
 
-        logger->Log("Unit `%s` completed execution in %ums with code %i.", unit->name.c_str(), (unsigned int)floor(time_difference.count() * 1000), exit_status);
+        logger->Log("Unit `%s` completed execution in %ums with code %i.", task.unit->name.c_str(), (unsigned int)floor(time_difference.count() * 1000), exit_status);
+
+        switch(task.unit->scheduling_behavior)
+        {
+            case BATCH:
+            {
+                task.unit->last_executed = chrono::system_clock::now();
+                break;
+            }
+
+            case STRICT:
+            {
+                task.unit->last_executed = task.scheduled_time;
+                break;
+            }
+        }
+
+        sqlite3_stmt *update_db;
+        const char * qstring = "INSERT INTO MissionHistory (UnitName, UnitTrigger, UnitDescription, ScheduledTimeESEC, TimeExecutedESEC, RunTimeMS, ExitCode) VALUES (?,?,?,?,?,?,?);";
+        sqlite3_prepare_v2(this->database, qstring, -1, &update_db, nullptr);
+
+        sqlite3_bind_text(update_db, 1, task.unit->name.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(update_db, 2, task.unit->trigger.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(update_db, 3, task.unit->description.c_str(), -1, SQLITE_STATIC);
+
+        sqlite3_int64 scheduled_time_esecs = chrono::duration_cast<chrono::seconds>(task.scheduled_time.time_since_epoch()).count();
+        sqlite3_bind_int64(update_db, 4, scheduled_time_esecs);
+
+        sqlite3_int64 time_executed_esecs = chrono::duration_cast<chrono::seconds>(sysclock_start.time_since_epoch()).count();
+        sqlite3_bind_int64(update_db, 5, time_executed_esecs);
+
+        sqlite3_int64 run_time_ms = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_start).count();
+        sqlite3_bind_int64(update_db, 6, run_time_ms);
+
+        sqlite3_bind_int(update_db, 7, exit_status);
+
+        sqlite3_step(update_db);
+
+        sqlite3_finalize(update_db);
 
         return exit_status;
     }
     else // Child
     {
         // Redirect STDOUT and STDERR to log file
-        fs::path unit_log_path = this->mission.base / "log" / (unit->name + ".log");
+        fs::path unit_log_path = this->mission.base / "log" / (task.unit->name + ".log");
 
-        logger->LogTag(unit->name.c_str(), "Logs for this unit can be found in %s.", unit_log_path.c_str());
+        logger->LogTag(task.unit->name.c_str(), "Logs for this unit can be found in %s.", unit_log_path.c_str());
 
         freopen(unit_log_path.c_str(), "a", stdout);
         freopen(unit_log_path.c_str(), "a", stderr);
 
         // Set working directory
-        fs::path working_directory = this->mission.base / "workspace" / unit->name;
+        fs::path working_directory = this->mission.base / "workspace" / task.unit->name;
         fs::create_directories(working_directory);
         fs::current_path(working_directory);
 
+        /*
+         * Prepare arguments.
+         *
+         * Here, we need to allocate space for the path to the executable, the arguments and the null terminator.
+         * *alloc without a matching free may look scary, but the memory needs to be valid for the entire runtime
+         * of the child process and will be deallocated by the OS when the process finishes.
+         *
+         * *alloc is guaranteed to fill the memory space with 0's, so there is no need to explicitly set the null terminator.
+         * See: `man malloc`
+         */
+        const char **argv = (const char **)calloc(task.unit->arguments.size() + 2, sizeof(char*));
+        argv[0] = task.unit->exec.c_str();
+
+        for(int i = 0; i < task.unit->arguments.size(); i++)
+        {
+            argv[i + 1] = task.unit->arguments[i].c_str();
+        }
+
         // Launch Unit
-        logger->LogTag(unit->name.c_str(), "Launching...");
+        logger->LogTag(task.unit->name.c_str(), "Launching...");
 
-        char *const argv[] = {(char*)fs::current_path().c_str(), nullptr};
-        execv(unit->exec.c_str(), argv);
+        execv(task.unit->exec.c_str(), (char *const *)argv);
 
-        logger->ErrorTag(unit->name.c_str(), "Unable to launch due to following error: `%s`", strerror(errno));
+        logger->ErrorTag(task.unit->name.c_str(), "Unable to launch due to following error: `%s`", strerror(errno));
 
         exit(1);
     }
 }
 
-void Agent::LowPriorityRunner()
+[[noreturn]] void Agent::LowPriorityRunner()
 {
     Logger lplog("LPR", this->mission.base / "log" / "agent.log");
 
     lplog.Log("Low Priority Runner has started. %u task(s) in queue.", this->low_priority_queue.Count());
 
-    while(this->low_priority_queue.Count() > 0)
+    while(true)
     {
+        while(this->low_priority_queue.Count() <= 0)
+        {
+            std::unique_lock lk(this->low_priority_queue.m_queue);
+            this->low_priority_queue.cv_queue.wait(lk);
+        }
 
         auto next_task = this->low_priority_queue.ConsumeNext();
 
@@ -251,10 +386,9 @@ void Agent::LowPriorityRunner()
         // If the trigger is close enough, run the task. Else, replace it in the queue and re-loop.
         if(next_task.scheduled_time <= chrono::system_clock::now() + chrono::seconds(30))
         {
-            this->RunUnit(next_task.unit);
+            this->RunTask(next_task);
 
-            // TODO: Implement batching!
-            ScheduledTask scheduled_task(next_task.unit->NextTrigger(next_task.scheduled_time), next_task.unit);
+            ScheduledTask scheduled_task(this->trigger_parser.NextTrigger(next_task.unit), next_task.unit);
             this->low_priority_queue.Add(scheduled_task);
         }
         else
@@ -283,8 +417,7 @@ int Agent::Run()
         {
             case LOW:
             {
-                // TODO: change to time loaded from DB
-                ScheduledTask scheduled_task(unit->NextTrigger(chrono::system_clock::now()), unit);
+                ScheduledTask scheduled_task(this->trigger_parser.NextTrigger(unit), unit);
                 this->low_priority_queue.Add(scheduled_task);
                 break;
             }
