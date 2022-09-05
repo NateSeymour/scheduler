@@ -14,6 +14,7 @@ FetchContent_Declare(
         GIT_TAG release-1.12.1
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+option(INSTALL_GTEST "Enable installation of googletest." OFF)
 FetchContent_MakeAvailable(googletest)
 
 FetchContent_Declare(
@@ -62,6 +63,9 @@ add_executable(libnys_test test/parser/TriggerParser.cpp)
 target_link_libraries(libnys_test PUBLIC gtest_main libnys)
 target_include_directories(libnys_test PRIVATE src)
 
-# GTest integration
-include(GoogleTest)
-gtest_discover_tests(libnys_test)
+# NYS
+add_custom_target(nys-scheduler)
+add_dependencies(nys-scheduler nysd nysctl libnys_test)
+
+# Install
+install(TARGETS nysd nysctl libnys)
