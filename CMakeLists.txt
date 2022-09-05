@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 include(FetchContent)
 
 # Libs
-find_library(SQLite3 NAMES sqlite sqlite3 SQLite3 REQUIRED VERSION 3.39)
+find_package(SQLite3 3.3 REQUIRED)
 
 FetchContent_Declare(
         googletest
@@ -47,7 +47,7 @@ add_library(libnys
         src/parser/Tokenizer.h
         src/parser/Token.h
 )
-target_link_libraries(libnys PRIVATE tomlplusplus::tomlplusplus SQLite3)
+target_link_libraries(libnys PRIVATE tomlplusplus::tomlplusplus SQLite::SQLite3)
 
 # NYS Daemon
 add_executable(nysd src/daemon.cpp src/daemon.h)
