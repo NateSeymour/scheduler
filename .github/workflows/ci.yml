@@ -20,6 +20,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            compiler: g++-12
+        
 
     steps:
     - uses: actions/checkout@v3
