@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstring>
 #include <cmath>
+#include <sys/resource.h>
 #include "Agent.h"
 
 namespace fs = std::filesystem;
