@@ -70,5 +70,4 @@ add_dependencies(nys-scheduler nysd nysctl libnys_test)
 # Install
 install(TARGETS nysd nysctl nys)
 install(DIRECTORY database DESTINATION share/nys_scheduler)
-install(DIRECTORY docs DESTINATION share/nys_scheduler)
 install(FILES nys.toml DESTINATION etc/nys_scheduler)
