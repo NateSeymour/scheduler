@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(not_your_scheduler VERSION 0.0.2)
+project(not_your_scheduler VERSION 0.0.3)
 
 set(CMAKE_CXX_STANDARD 20)
 
