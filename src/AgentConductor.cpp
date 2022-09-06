@@ -51,11 +51,13 @@ void AgentConductor::RunAgent()
     mission.base = this->launch_parameters.home_directory / ".nys";
     mission.binary = this->launch_parameters.binary_path;
     mission.database_resources = AgentConductor::ResolvePath({
+        "/opt/homebrew/share/nys_scheduler/database",
         "/usr/local/share/nys_scheduler/database",
         "../database",
         "./database"
     });
     mission.config = AgentConductor::ResolvePath({
+        "/opt/homebrew/etc/nys_scheduler/nys.toml",
          "/usr/local/etc/nys_scheduler/nys.toml",
          "../nys.toml",
          "./nys.toml"
