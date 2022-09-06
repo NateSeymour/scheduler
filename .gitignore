@@ -2,6 +2,7 @@
 /build
 /install
 /.nys
+/docs
 .DS_Store
 .idea
 .vs_code
