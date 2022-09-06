@@ -35,7 +35,7 @@ void Agent::UpdateDatabase()
     sqlite3_finalize(stmt_get_version);
 
     // Load database schema info
-    fs::path schema_directory = this->mission.binary.parent_path() / "database";
+    fs::path schema_directory = this->mission.database_resources;
     fs::path schema_info_file = schema_directory / "database.toml";
 
     toml::table schema_info = toml::parse_file(schema_info_file.c_str());

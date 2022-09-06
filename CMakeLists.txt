@@ -29,7 +29,7 @@ configure_file(database/database.toml database/database.toml COPYONLY)
 configure_file(database/VERSION-1.sql database/VERSION-1.sql COPYONLY)
 
 # parser
-add_library(libnys
+add_library(nys
         src/Agent.cpp
         src/Agent.h
         src/LaunchEnvironment.h
@@ -48,19 +48,19 @@ add_library(libnys
         src/parser/Tokenizer.h
         src/parser/Token.h
 )
-target_link_libraries(libnys PRIVATE tomlplusplus::tomlplusplus SQLite::SQLite3)
+target_link_libraries(nys PRIVATE tomlplusplus::tomlplusplus SQLite::SQLite3)
 
 # NYS Daemon
 add_executable(nysd src/daemon.cpp src/daemon.h)
-target_link_libraries(nysd PUBLIC libnys)
+target_link_libraries(nysd PUBLIC nys)
 
 # nysctl
 add_executable(nysctl src/nysctl.cpp src/nysctl.h)
-target_link_libraries(nysctl PUBLIC libnys)
+target_link_libraries(nysctl PUBLIC nys)
 
 # libnys tests
 add_executable(libnys_test test/parser/TriggerParser.cpp)
-target_link_libraries(libnys_test PUBLIC gtest_main libnys)
+target_link_libraries(libnys_test PUBLIC gtest_main nys)
 target_include_directories(libnys_test PRIVATE src)
 
 # NYS
@@ -68,4 +68,7 @@ add_custom_target(nys-scheduler)
 add_dependencies(nys-scheduler nysd nysctl libnys_test)
 
 # Install
-install(TARGETS nysd nysctl libnys)
+install(TARGETS nysd nysctl nys)
+install(DIRECTORY database DESTINATION share/nys_scheduler)
+install(DIRECTORY docs DESTINATION share/nys_scheduler)
+install(FILES nys.toml DESTINATION etc/nys_scheduler)

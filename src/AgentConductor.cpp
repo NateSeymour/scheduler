@@ -35,11 +35,31 @@ void AgentConductor::Setup()
     this->logger = std::make_unique<Logger>("AgentConductor", this->launch_parameters.home_directory / ".nys" / "log" / "conductor.log");
 }
 
+std::filesystem::path AgentConductor::ResolvePath(const std::vector<std::filesystem::path>& paths)
+{
+    for(auto const& path : paths)
+    {
+        if(fs::exists(path)) return path;
+    }
+
+    throw std::runtime_error("None of the paths exists!");
+}
+
 void AgentConductor::RunAgent()
 {
     AgentMission mission;
     mission.base = this->launch_parameters.home_directory / ".nys";
     mission.binary = this->launch_parameters.binary_path;
+    mission.database_resources = AgentConductor::ResolvePath({
+        "/usr/local/share/nys_scheduler/database",
+        "../database",
+        "./database"
+    });
+    mission.config = AgentConductor::ResolvePath({
+         "/usr/local/etc/nys_scheduler/nys.toml",
+         "../nys.toml",
+         "./nys.toml"
+     });
 
     logger->Log("Conductor launched from `%s`", mission.binary.c_str());
     logger->Log("Using `%s` as mission base.", mission.base.c_str());

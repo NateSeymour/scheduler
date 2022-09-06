@@ -1,5 +1,7 @@
 /cmake-build-*
 /build
+/install
+/.nys
 .DS_Store
 .idea
 .vs_code

@@ -3,6 +3,7 @@
 
 #include <mutex>
 #include <filesystem>
+#include <vector>
 #include "LaunchEnvironment.h"
 #include "Agent.h"
 #include "Logger.h"
@@ -15,6 +16,7 @@ private:
     std::unique_ptr<Logger> logger;
 
     static void VerifyMakeOrFailDirectory(const std::filesystem::path& path);
+    static std::filesystem::path ResolvePath(const std::vector<std::filesystem::path>& paths);
     void SetupNysDirectory() const;
 
     friend class Agent;
