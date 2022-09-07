@@ -54,6 +54,11 @@ std::unique_ptr<Token> Tokenizer::NextToken()
                 {
                     return std::make_unique<Token>(TOKEN_KEYWORD_EVERY);
                 }
+
+                default:
+                {
+                    throw std::runtime_error("Wasn't expecting that token!");
+                }
             }
         }
     }

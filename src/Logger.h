@@ -20,10 +20,18 @@ private:
 public:
     template<typename... Args> void LogTagStream(std::ostream& log_stream, const char *alternate_tag, const char *fmt, Args... args)
     {
+        /*
+         * Clang's warnings are annoying here and there is no format security risk for the following reasons:
+         * 1. This method is only called with string literals
+         * 2. std::snprintf prevents buffer overflowing
+         */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-security"
         // Add 1 to include the null terminator
         size_t buffer_size = std::snprintf(nullptr, 0, fmt, args...) + 1;
         char *buffer = (char*)std::malloc(buffer_size);
         std::snprintf(buffer, buffer_size, fmt, args...);
+#pragma clang diagnostic pop
 
         // Calculate timestamp
         auto time_now = std::chrono::system_clock::now();

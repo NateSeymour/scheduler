@@ -28,10 +28,7 @@ FetchContent_MakeAvailable(tomlplusplus)
 add_library(nys
         src/Agent.cpp
         src/Agent.h
-        src/LaunchEnvironment.h
         src/Logger.h
-        src/AgentConductor.cpp
-        src/AgentConductor.h
         src/AgentMission.h
         src/Unit.h
         src/ScheduledTaskQueue.cpp
@@ -44,15 +41,15 @@ add_library(nys
         src/parser/Tokenizer.h
         src/parser/Token.h
         src/ipc/IpcServer.cpp
-        src/ipc/IpcServer.h src/message/NysMqBroadcaster.cpp src/message/NysMqBroadcaster.h src/message/NysMqReceiver.cpp src/message/NysMqReceiver.h src/message/NysMessage.h)
+        src/ipc/IpcServer.h src/message/NysMqBroadcaster.cpp src/message/NysMqBroadcaster.h src/message/NysMqReceiver.cpp src/message/NysMqReceiver.h src/message/NysMessage.h src/daemon.h)
 target_link_libraries(nys PRIVATE tomlplusplus::tomlplusplus SQLite::SQLite3)
 
 # NYS Daemon
-add_executable(nysd src/daemon.cpp src/daemon.h)
+add_executable(nysd src/daemon.cpp)
 target_link_libraries(nysd PUBLIC nys)
 
 # nysctl
-add_executable(nysctl src/nysctl.cpp src/nysctl.h)
+add_executable(nysctl src/nysctl.cpp)
 target_link_libraries(nysctl PUBLIC nys)
 
 # libnys tests

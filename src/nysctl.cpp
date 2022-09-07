@@ -1,4 +1,4 @@
-#include "nysctl.h"
+#include <ncurses.h>
 
 int main()
 {

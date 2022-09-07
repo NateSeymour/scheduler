@@ -5,13 +5,11 @@
 #include <vector>
 #include <chrono>
 #include <sqlite3.h>
-#include "LaunchEnvironment.h"
 #include "AgentMission.h"
 #include "Unit.h"
 #include "Logger.h"
 #include "ScheduledTaskQueue.h"
 #include "parser/TriggerParser.h"
-#include "AgentConductor.h"
 
 class Agent
 {
@@ -33,10 +31,10 @@ private:
     int RunTask(const ScheduledTask& task);
     void UpdateDatabase();
     void LoadUnits();
-    void Cleanup();
 
 public:
     int Run();
+    void Cleanup();
     explicit Agent(AgentMission mission) : mission(std::move(mission))
     {
         this->logger = std::make_unique<Logger>("Agent", this->mission.base / "log" / "agent.log");

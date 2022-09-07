@@ -202,13 +202,13 @@ void Agent::LoadUnits()
 
                 switch(unit->scheduling_behavior)
                 {
-                    case BATCH:
+                    case SCHEDULING_BATCH:
                     {
                         last_run_esecs = time_executed_esecs;
                         break;
                     }
 
-                    case STRICT:
+                    case SCHEDULING_STRICT:
                     {
                         last_run_esecs = scheduled_time_esecs;
                         break;
@@ -271,13 +271,13 @@ int Agent::RunTask(const ScheduledTask& task)
 
         switch(task.unit->scheduling_behavior)
         {
-            case BATCH:
+            case SCHEDULING_BATCH:
             {
                 task.unit->last_executed = chrono::system_clock::now();
                 break;
             }
 
-            case STRICT:
+            case SCHEDULING_STRICT:
             {
                 task.unit->last_executed = task.scheduled_time;
                 break;
@@ -417,17 +417,17 @@ int Agent::Run()
     {
         switch(unit->priority)
         {
-            case LOW:
+            case PRIORITY_LOW:
             {
                 ScheduledTask scheduled_task(this->trigger_parser.NextTrigger(unit), unit);
                 this->low_priority_queue.Add(scheduled_task);
                 break;
             }
 
-            case MEDIUM:
-            case HIGH:
+            case PRIORITY_MEDIUM:
+            case PRIORITY_HIGH:
             {
-                logger->Error("WARN `MEDIUM` and `HIGH` priority scheduling not yet implemented!");
+                logger->Error("WARN `PRIORITY_MEDIUM` and `PRIORITY_HIGH` priority scheduling are not yet implemented!");
                 break;
             }
         }

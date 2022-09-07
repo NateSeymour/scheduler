@@ -5,18 +5,19 @@
 #include <string>
 #include <filesystem>
 #include <chrono>
+#include <atomic>
 
 enum UnitPriority
 {
-    LOW,
-    MEDIUM,
-    HIGH
+    PRIORITY_LOW,
+    PRIORITY_MEDIUM,
+    PRIORITY_HIGH
 };
 
 enum SchedulingBehavior
 {
-    BATCH,
-    STRICT
+    SCHEDULING_BATCH,
+    SCHEDULING_STRICT
 };
 
 struct Unit
@@ -24,16 +25,19 @@ struct Unit
     std::filesystem::path path;
     std::string name;
     std::string description = "Generic description.";
-    UnitPriority priority = LOW;
+    UnitPriority priority = PRIORITY_LOW;
     std::string md5_hash;
     std::string trigger = "never";
 
-    SchedulingBehavior scheduling_behavior = BATCH;
+    SchedulingBehavior scheduling_behavior = SCHEDULING_BATCH;
 
     std::filesystem::path exec;
     std::vector<std::string> arguments;
 
     std::chrono::time_point<std::chrono::system_clock> last_executed;
+
+    std::atomic_bool is_running;
+    std::atomic_uint64_t pid;
 };
 
 #endif //NOT_YOUR_SCHEDULER_UNIT_H
