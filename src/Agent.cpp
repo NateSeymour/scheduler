@@ -11,6 +11,7 @@
 #include <cmath>
 #include <sys/resource.h>
 #include "Agent.h"
+#include "message/NysMqReceiver.h"
 
 namespace fs = std::filesystem;
 namespace chrono = std::chrono;
@@ -435,12 +436,31 @@ int Agent::Run()
     // Start LowPriorityRunner
     logger->Log("Starting Low Priority Runner...");
     std::thread lp_thread(&Agent::LowPriorityRunner, this);
-    lp_thread.join();
 
-    // Cleanup
-    this->Cleanup();
+    // Message loop
+    NysMqReceiver mq_receiver(this->mission.broadcaster);
 
-    return 0;
+    while(true)
+    {
+        NysMessage message = mq_receiver.ConsumeNext();
+
+        switch(message.type)
+        {
+            case MESSAGE_SHUTDOWN:
+            {
+                logger->Log("Shutting down gracefully...");
+                lp_thread.join();
+                this->Cleanup();
+
+                return 0;
+            }
+
+            case MESSAGE_NONE:
+            {
+                break;
+            }
+        }
+    }
 }
 
 void Agent::Cleanup()

@@ -8,22 +8,22 @@
 
 enum TokenType
 {
-    INVALID,
-    WHITESPACE,
-    NONE,
+    TOKEN_INVALID,
+    TOKEN_WHITESPACE,
+    TOKEN_NONE,
 
     // Interval keywords
-    KEYWORD_EVERY,
+    TOKEN_KEYWORD_EVERY,
 
-    integer,
-    interval,
-    weekday,
-    identifier
+    TOKEN_integer,
+    TOKEN_interval,
+    TOKEN_weekday,
+    TOKEN_identifier
 };
 
-typedef int64_t TOKEN_INTEGER;
-typedef std::chrono::minutes TOKEN_MINUTES;
-typedef std::chrono::weekday TOKEN_WEEKDAY;
+typedef int64_t TOKEN_TYPE_INTEGER;
+typedef std::chrono::minutes TOKEN_TYPE_MINUTES;
+typedef std::chrono::weekday TOKEN_TYPE_WEEKDAY;
 
 class Token
 {

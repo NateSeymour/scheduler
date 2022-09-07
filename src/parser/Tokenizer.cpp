@@ -4,15 +4,15 @@ const std::map<TokenType, std::regex> Tokenizer::token_map = {
         /**
          * Literals
          */
-        { integer, std::regex("^(\\d+)") },
-        { KEYWORD_EVERY, std::regex("^(every)") },
-        { interval, std::regex("(^seconds?|^minutes?|^hours?|^days?)") },
+        {TOKEN_integer,       std::regex("^(\\d+)") },
+        {TOKEN_KEYWORD_EVERY, std::regex("^(every)") },
+        {TOKEN_interval,      std::regex("(^seconds?|^minutes?|^hours?|^days?)") },
         //{ identifier, std::regex("^([a-z]+)") },
 
         /**
          * Misc.
          */
-        { WHITESPACE, std::regex("^\\s+") }
+        {TOKEN_WHITESPACE,    std::regex("^\\s+") }
 };
 
 std::unique_ptr<Token> Tokenizer::NextToken()
@@ -29,34 +29,34 @@ std::unique_ptr<Token> Tokenizer::NextToken()
             this->cursor += match.length();
 
             switch(type) {
-                case WHITESPACE:
+                case TOKEN_WHITESPACE:
                     continue;
 
-                case integer:
+                case TOKEN_integer:
                 {
-                    TOKEN_INTEGER value = std::stoll(match.str());
-                    return std::make_unique<Token>(integer, value);
+                    TOKEN_TYPE_INTEGER value = std::stoll(match.str());
+                    return std::make_unique<Token>(TOKEN_integer, value);
                 }
 
-                case interval:
+                case TOKEN_interval:
                 {
                     if(match.str().starts_with("second"))
-                        return std::make_unique<Token>(interval, static_cast<TOKEN_INTEGER>(1));
+                        return std::make_unique<Token>(TOKEN_interval, static_cast<TOKEN_TYPE_INTEGER>(1));
                     if(match.str().starts_with("minute"))
-                        return std::make_unique<Token>(interval, static_cast<TOKEN_INTEGER>(60));
+                        return std::make_unique<Token>(TOKEN_interval, static_cast<TOKEN_TYPE_INTEGER>(60));
                     if(match.str().starts_with("hour"))
-                        return std::make_unique<Token>(interval, static_cast<TOKEN_INTEGER>(60 * 60));
+                        return std::make_unique<Token>(TOKEN_interval, static_cast<TOKEN_TYPE_INTEGER>(60 * 60));
                     if(match.str().starts_with("day"))
-                        return std::make_unique<Token>(interval, static_cast<TOKEN_INTEGER>(60 * 60 * 24));
+                        return std::make_unique<Token>(TOKEN_interval, static_cast<TOKEN_TYPE_INTEGER>(60 * 60 * 24));
                 }
 
-                case KEYWORD_EVERY:
+                case TOKEN_KEYWORD_EVERY:
                 {
-                    return std::make_unique<Token>(KEYWORD_EVERY);
+                    return std::make_unique<Token>(TOKEN_KEYWORD_EVERY);
                 }
             }
         }
     }
 
-    return std::make_unique<Token>(NONE);
+    return std::make_unique<Token>(TOKEN_NONE);
 }

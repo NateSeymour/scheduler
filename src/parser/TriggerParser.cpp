@@ -36,7 +36,7 @@ void TriggerParser::Statement()
 {
     switch (this->lookahead->type)
     {
-        case KEYWORD_EVERY:
+        case TOKEN_KEYWORD_EVERY:
         {
             this->EveryInterval();
             break;
@@ -51,32 +51,32 @@ void TriggerParser::Statement()
 
 /**
  * EveryInterval
- *  : KEYWORD_EVERY integer interval
- *  : KEYWORD_EVERY interval
+ *  : TOKEN_KEYWORD_EVERY TOKEN_integer TOKEN_interval
+ *  : TOKEN_KEYWORD_EVERY TOKEN_interval
  *  ;
  */
 void TriggerParser::EveryInterval()
 {
-    this->Eat(KEYWORD_EVERY);
+    this->Eat(TOKEN_KEYWORD_EVERY);
 
     switch(this->lookahead->type)
     {
-        case integer:
+        case TOKEN_integer:
         {
-            auto interval_duration = this->Eat(integer);
-            auto interval_period = this->Eat(interval);
+            auto interval_duration = this->Eat(TOKEN_integer);
+            auto interval_period = this->Eat(TOKEN_interval);
 
-            auto interval_as_seconds = std::chrono::seconds(*interval_duration->As<TOKEN_INTEGER>());
-            interval_as_seconds *= *interval_period->As<TOKEN_INTEGER>();
+            auto interval_as_seconds = std::chrono::seconds(*interval_duration->As<TOKEN_TYPE_INTEGER>());
+            interval_as_seconds *= *interval_period->As<TOKEN_TYPE_INTEGER>();
 
             this->calculated_trigger = this->previous_trigger + interval_as_seconds;
             break;
         }
 
-        case interval:
+        case TOKEN_interval:
         {
-            auto interval_period = this->Eat(interval);
-            auto period_as_seconds = std::chrono::seconds(*interval_period->As<TOKEN_INTEGER>());
+            auto interval_period = this->Eat(TOKEN_interval);
+            auto period_as_seconds = std::chrono::seconds(*interval_period->As<TOKEN_TYPE_INTEGER>());
 
             this->calculated_trigger = this->previous_trigger + period_as_seconds;
             break;

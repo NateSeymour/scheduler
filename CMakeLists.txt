@@ -24,10 +24,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tomlplusplus)
 
-# Copy supporting files
-configure_file(database/database.toml database/database.toml COPYONLY)
-configure_file(database/VERSION-1.sql database/VERSION-1.sql COPYONLY)
-
 # parser
 add_library(nys
         src/Agent.cpp
@@ -47,7 +43,8 @@ add_library(nys
         src/parser/Tokenizer.cpp
         src/parser/Tokenizer.h
         src/parser/Token.h
-)
+        src/ipc/IpcServer.cpp
+        src/ipc/IpcServer.h src/message/NysMqBroadcaster.cpp src/message/NysMqBroadcaster.h src/message/NysMqReceiver.cpp src/message/NysMqReceiver.h src/message/NysMessage.h)
 target_link_libraries(nys PRIVATE tomlplusplus::tomlplusplus SQLite::SQLite3)
 
 # NYS Daemon
@@ -67,7 +64,14 @@ target_include_directories(libnys_test PRIVATE src)
 add_custom_target(nys-scheduler)
 add_dependencies(nys-scheduler nysd nysctl libnys_test)
 
+# plist for launchd
+configure_file(com.notyoursoftware.scheduler.plist.in ${CMAKE_BINARY_DIR}/com.notyoursoftware.scheduler.plist)
+
 # Install
 install(TARGETS nysd nysctl nys)
 install(DIRECTORY database DESTINATION share/nys_scheduler)
 install(FILES nys.toml DESTINATION etc/nys_scheduler)
+
+if(APPLE)
+    install(FILES ${CMAKE_BINARY_DIR}/com.notyoursoftware.scheduler.plist DESTINATION $ENV{HOME}/Library/LaunchAgents)
+endif()

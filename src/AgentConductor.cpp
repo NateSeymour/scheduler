@@ -1,8 +1,10 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include "message/NysMqBroadcaster.h"
 #include "AgentConductor.h"
 #include "AgentMission.h"
+#include "ipc/IpcServer.h"
 
 namespace fs = std::filesystem;
 
@@ -47,6 +49,8 @@ std::filesystem::path AgentConductor::ResolvePath(const std::vector<std::filesys
 
 void AgentConductor::RunAgent()
 {
+    NysMqBroadcaster broadcaster;
+
     AgentMission mission;
     mission.base = this->launch_parameters.home_directory / ".nys";
     mission.binary = this->launch_parameters.binary_path;
@@ -62,11 +66,16 @@ void AgentConductor::RunAgent()
          "../nys.toml",
          "./nys.toml"
      });
+    mission.broadcaster = &broadcaster;
 
     logger->Log("Conductor launched from `%s`", mission.binary.c_str());
     logger->Log("Using `%s` as mission base.", mission.base.c_str());
 
     Agent agent(mission);
+
+    logger->Log("Starting server...");
+    IpcServer server;
+    server.StartServer((mission.base / "nys.sock").c_str());
 
     /*
      * If the agent returns, then we allow the program to exit.
@@ -89,4 +98,3 @@ void AgentConductor::RunAgent()
         }
     }
 }
-

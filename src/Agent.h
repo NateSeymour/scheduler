@@ -13,7 +13,6 @@
 #include "parser/TriggerParser.h"
 #include "AgentConductor.h"
 
-
 class Agent
 {
 private:
