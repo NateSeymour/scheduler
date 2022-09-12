@@ -353,18 +353,32 @@ int Agent::RunTask(const ScheduledTask& task)
     }
 }
 
-[[noreturn]] void Agent::LowPriorityRunner()
+void Agent::LowPriorityRunner()
 {
     Logger lplog("LPR", this->mission.base / "log" / "agent.log");
 
     lplog.Log("Low Priority Runner has started. %u task(s) in queue.", this->low_priority_queue.Count());
 
+    NysMqReceiver receiver(this->mission.broadcaster);
+
     while(true)
     {
-        while(this->low_priority_queue.Count() <= 0)
+        auto message = receiver.Consume();
+        switch(message.type)
+        {
+            case MESSAGE_SHUTDOWN:
+                return;
+
+            default:
+                break;
+        }
+
+        if(this->low_priority_queue.Count() <= 0)
         {
             std::unique_lock lk(this->low_priority_queue.m_queue);
             this->low_priority_queue.cv_queue.wait(lk);
+
+            continue;
         }
 
         auto next_task = this->low_priority_queue.ConsumeNext();
@@ -390,6 +404,7 @@ int Agent::RunTask(const ScheduledTask& task)
         {
             this->RunTask(next_task);
 
+            // Reschedule task
             ScheduledTask scheduled_task(this->trigger_parser.NextTrigger(next_task.unit), next_task.unit);
             this->low_priority_queue.Add(scheduled_task);
         }
@@ -443,6 +458,9 @@ int Agent::Run()
     while(true)
     {
         NysMessage message = mq_receiver.ConsumeNext();
+
+        // Inform LPQ about the new message
+        this->low_priority_queue.Poke();
 
         switch(message.type)
         {

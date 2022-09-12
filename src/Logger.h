@@ -21,9 +21,9 @@ public:
     template<typename... Args> void LogTagStream(std::ostream& log_stream, const char *alternate_tag, const char *fmt, Args... args)
     {
         /*
-         * Clang's warnings are annoying here and there is no format security risk for the following reasons:
-         * 1. This method is only called with string literals
-         * 2. std::snprintf prevents buffer overflowing
+         * Clang's warnings are annoying here, and there is no reasonable assumption
+         * of a format security risk, as these methods are only called with string
+         * literals.
          */
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wformat-security"

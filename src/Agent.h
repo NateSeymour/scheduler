@@ -27,7 +27,7 @@ private:
 
     ScheduledTaskQueue low_priority_queue;
 
-    [[noreturn]] void LowPriorityRunner();
+    void LowPriorityRunner();
     int RunTask(const ScheduledTask& task);
     void UpdateDatabase();
     void LoadUnits();

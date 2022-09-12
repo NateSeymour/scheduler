@@ -91,7 +91,7 @@ int main(int argc, const char **argv)
     // Start IPC server
     logger.Log("Starting server...");
     IpcServer server;
-    server.StartServer((mission.base / "nys.sock").c_str());
+    server.StartServer(mission);
 
     /*
      * If the agent returns, then we allow the program to exit.
