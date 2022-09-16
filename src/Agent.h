@@ -5,11 +5,17 @@
 #include <vector>
 #include <chrono>
 #include <sqlite3.h>
-#include "AgentMission.h"
+#include "config/AgentMission.h"
 #include "Unit.h"
 #include "Logger.h"
 #include "ScheduledTaskQueue.h"
 #include "parser/TriggerParser.h"
+
+enum AgentReturn
+{
+    AGENT_RELOAD,
+    AGENT_SHUTDOWN
+};
 
 class Agent
 {
@@ -27,18 +33,21 @@ private:
 
     ScheduledTaskQueue low_priority_queue;
 
+    std::atomic_bool is_running = false;
+
     void LowPriorityRunner();
     int RunTask(const ScheduledTask& task);
     void UpdateDatabase();
     void LoadUnits();
 
 public:
-    int Run();
+    AgentReturn Run();
     void Cleanup();
     explicit Agent(AgentMission mission) : mission(std::move(mission))
     {
         this->logger = std::make_unique<Logger>("Agent", this->mission.base / "log" / "agent.log");
     }
+    ~Agent();
 };
 
 #endif //NOT_YOUR_SCHEDULER_AGENT_H

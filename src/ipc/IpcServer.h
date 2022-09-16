@@ -13,8 +13,11 @@
 #include <unistd.h>
 #include <thread>
 #include <memory>
-#include "../AgentMission.h"
+#include <vector>
+#include <arpa/inet.h>
+#include "../config/AgentMission.h"
 #include "../Logger.h"
+#include "IpcHeader.h"
 
 #define BACKLOG_MAX 10
 
@@ -36,10 +39,160 @@ private:
     int kq = -1;
     AgentMission mission;
 
+    std::vector<int> connections;
+
     std::unique_ptr<std::thread> connection_listener;
     std::unique_ptr<Logger> logger;
 
-public:
+    void ProcessClientMessage(int fd)
+    {
+        /*
+         * We have to create a header_buffer to read into _and_ a packet object, instead of
+         * just reading directly into the packet object, because modern compilers will
+         * pad structures for optimized memory access/alignment.
+         */
+        IpcHeader header{};
+
+        char header_buffer[IPC_HEADER_SIZE];
+        memset(header_buffer, 0, IPC_HEADER_SIZE);
+
+        // Read the client's header
+        size_t bytes_in = read(fd, header_buffer, IPC_HEADER_SIZE);
+        if(bytes_in < 0)
+        {
+            this->logger->Error("The following error caused a dropped message from (%i): %s.", fd, strerror(errno));
+            return;
+        }
+
+        if(bytes_in < IPC_HEADER_SIZE)
+        {
+            this->logger->Error("Received invalid message from (%i): Incomplete header.", fd);
+            return;
+        }
+
+        // Populate header structure
+        memcpy(&header.magic, header_buffer, 6);
+        header.version = *(uint8_t*)(header_buffer + 6);
+        header.echo = ntohs(*(uint16_t*)(header_buffer + 7));
+        header.message_type = *(NysMessageType*)(header_buffer + 9);
+        header.body_length = ntohs(*(uint16_t*)(header_buffer + 10));
+
+        // Sanity checks
+        if(strncmp(header.magic, "NYSIPC", 6) != 0)
+        {
+            this->logger->Error("Received invalid message from (%i): Missing magic.", fd);
+            return;
+        }
+
+        // Sanity checks
+        if(header.version != 1)
+        {
+            this->logger->Error("Received invalid message from (%i): Unsupported protocol version %i.", fd, header.version);
+            return;
+        }
+
+        // Process message
+        switch(header.message_type)
+        {
+            /*
+             * Relay message
+             */
+            case MESSAGE_SHUTDOWN:
+            case MESSAGE_RELOAD:
+            {
+                this->mission.broadcaster->Broadcast({
+                    .type = header.message_type
+                });
+                break;
+            }
+
+            /*
+             * Ignore message
+             */
+            case MESSAGE_NONE:
+            case MESSAGE_NEW_CLIENT:
+                break;
+        }
+    }
+
+    void CloseClientConnection(int fd)
+    {
+        /*
+         * We don't need to remove the connection from the kqueue explicitly, because
+         * filters are automatically removed upon the last `close` of their associated
+         * file descriptor. See `man kqueue`.
+         */
+        close(fd);
+
+        auto it = std::remove_if(this->connections.begin(), this->connections.end(), [fd](int conn) {
+            return conn == fd;
+        });
+        this->connections.erase(it, this->connections.end());
+
+        this->logger->Log("Client disconnected (%i). %i active clients.", fd, this->connections.size());
+    }
+
+    void AcceptClient()
+    {
+        int new_connection = accept(this->sockfd, nullptr, nullptr);
+
+        if(new_connection == -1)
+        {
+            this->logger->Error("WARN Problem accepting new client connection.");
+            return;
+        }
+
+        // Add new client to kqueue events
+        struct kevent64_s conn_event{};
+        EV_SET64(&conn_event, new_connection, EVFILT_READ, EV_ADD | EV_EOF | EV_CLEAR, 0, 0, 0, 0, 0);
+        kevent64(this->kq, &conn_event, 1, nullptr, 0, 0, nullptr);
+
+        this->connections.push_back(new_connection);
+
+        this->mission.broadcaster->Broadcast({
+            .type = MESSAGE_NEW_CLIENT
+        });
+        this->logger->Log("New connection received (%i). %i active clients.", new_connection, this->connections.size());
+    }
+
+    int ProcessEvent(struct kevent64_s event)
+    {
+        switch(event.filter)
+        {
+            case EVFILT_USER:
+            {
+                if(event.udata == UserServerEvents::SERVER_SHUTDOWN) return 1;
+                break;
+            }
+
+            case EVFILT_READ:
+            {
+                // There is a new connection to be accepted
+                if(event.ident == this->sockfd)
+                {
+                    this->AcceptClient();
+                }
+                else // There is data to be read from one of the clients
+                {
+                    int client_fd = (int)event.ident;
+
+                    // Client has disconnected
+                    if(event.flags & EV_EOF)
+                    {
+                        this->CloseClientConnection(client_fd);
+                        break;
+                    }
+
+                    // Client has sent data
+                    this->ProcessClientMessage(client_fd);
+                }
+                break;
+            }
+        }
+
+        return 0;
+    }
+
     void ConnectionListener()
     {
         /*
@@ -78,34 +231,15 @@ public:
 
             for(int i = 0; i < nevents; i++)
             {
-                switch(event_list[i].filter)
+                if(this->ProcessEvent(event_list[i]) != 0)
                 {
-                    case EVFILT_USER:
-                    {
-                        if(event_list[i].udata == UserServerEvents::SERVER_SHUTDOWN) return;
-                        break;
-                    }
-
-                    // TODO: handle incoming connections
-                    case EVFILT_READ:
-                    {
-                        std::cout << "Handling accept" << std::endl;
-                        struct sockaddr_un conn_addr{};
-                        socklen_t len = sizeof(conn_addr);
-
-                        int new_connection = accept(this->sockfd, (sockaddr*)&conn_addr, &len);
-
-                        std::cout << new_connection << std::endl;
-
-                        close(new_connection);
-
-                        break;
-                    }
+                    return;
                 }
             }
         }
     }
 
+public:
     void StartServer(const AgentMission& server_mission)
     {
         this->mission = server_mission;
@@ -136,7 +270,7 @@ public:
             throw std::runtime_error("Failed to create socket for server!");
         }
 
-        // Make the socket non-blocking
+        // Make the socket non-blocking (we use kqueue to detect new clients)
         fcntl(this->sockfd, F_SETFL, O_NONBLOCK);
 
         // Bind to the socket
@@ -176,16 +310,23 @@ public:
     {
         if(this->sockfd != -1)
         {
-            // Notify threads to shut down
+            // Notify server to shut down
             struct kevent64_s shutdown_event{};
             EV_SET64(&shutdown_event, Identity::SERVER, EVFILT_USER, 0, NOTE_TRIGGER, NULL, UserServerEvents::SERVER_SHUTDOWN, NULL, NULL);
             kevent64(this->kq, &shutdown_event, 1, nullptr, 0, 0, nullptr);
 
-            // Close handles and join threads
-            close(this->sockfd);
-            unlink(this->addr.sun_path);
             this->connection_listener->join();
             close(this->kq);
+
+            // Close all server connections
+            for(auto const& conn : this->connections)
+            {
+                close(conn);
+            }
+
+            // Close server socket and unlink socket from filesystem
+            close(this->sockfd);
+            unlink(this->addr.sun_path);
         }
     }
 };

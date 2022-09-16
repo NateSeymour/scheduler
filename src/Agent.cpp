@@ -41,7 +41,7 @@ void Agent::UpdateDatabase()
 
     toml::table schema_info = toml::parse_file(schema_info_file.c_str());
 
-    long schema_latest = schema_info["database"]["latest"].as_integer()->get();
+    long schema_latest = schema_info.at_path("database.latest").as_integer()->get();
 
     if(this->database_version < schema_latest)
     {
@@ -87,9 +87,9 @@ void Agent::UpdateDatabase()
             throw std::runtime_error("Error executing schema update file!");
         }
 
-        logger->Log("Finished updating database.");
-
         this->database_version++;
+
+        logger->Log("Finished updating database to version %i.", this->database_version);
     }
 
     // If we have surpassed the latest schema version, throw an error.
@@ -257,18 +257,29 @@ int Agent::RunTask(const ScheduledTask& task)
 
     if(child_pid > 0) // Parent
     {
+        // Wait for unit to end execution
         int stat_loc;
         struct rusage rusage{};
 
         wait4(child_pid, &stat_loc, 0, &rusage);
 
+        task.unit->is_running = false;
+
+        // Measure execution time
         auto clock_end = chrono::steady_clock::now();
         chrono::duration<double> time_difference = clock_end - clock_start;
 
+        // Grab exit status
         int exit_status = WEXITSTATUS(stat_loc);
 
         logger->Log("Unit `%s` completed execution in %ums with code %i.", task.unit->name.c_str(), (unsigned int)floor(time_difference.count() * 1000), exit_status);
 
+        /*
+         * Set last executed time. If batch scheduling, we last run now.
+         * If using strict scheduling, we set the last run time to the scheduled time,
+         * so that the scheduler will fill in the rest of the missed jobs between then
+         * and now.
+         */
         switch(task.unit->scheduling_behavior)
         {
             case SCHEDULING_BATCH:
@@ -284,28 +295,32 @@ int Agent::RunTask(const ScheduledTask& task)
             }
         }
 
-        sqlite3_stmt *update_db;
-        const char * qstring = "INSERT INTO MissionHistory (UnitName, UnitTrigger, UnitDescription, ScheduledTimeESEC, TimeExecutedESEC, RunTimeMS, ExitCode) VALUES (?,?,?,?,?,?,?);";
-        sqlite3_prepare_v2(this->database, qstring, -1, &update_db, nullptr);
+        // Wall of sqlite code to insert the run into the db
+        if(this->database != nullptr)
+        {
+            sqlite3_stmt *update_db;
+            const char * qstring = "INSERT INTO MissionHistory (UnitName, UnitTrigger, UnitDescription, ScheduledTimeESEC, TimeExecutedESEC, RunTimeMS, ExitCode) VALUES (?,?,?,?,?,?,?);";
+            sqlite3_prepare_v2(this->database, qstring, -1, &update_db, nullptr);
 
-        sqlite3_bind_text(update_db, 1, task.unit->name.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(update_db, 2, task.unit->trigger.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_text(update_db, 3, task.unit->description.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(update_db, 1, task.unit->name.c_str(), -1, SQLITE_STATIC); // We can use static storage, because the `string` will outlive the statement.
+            sqlite3_bind_text(update_db, 2, task.unit->trigger.c_str(), -1, SQLITE_STATIC);
+            sqlite3_bind_text(update_db, 3, task.unit->description.c_str(), -1, SQLITE_STATIC);
 
-        sqlite3_int64 scheduled_time_esecs = chrono::duration_cast<chrono::seconds>(task.scheduled_time.time_since_epoch()).count();
-        sqlite3_bind_int64(update_db, 4, scheduled_time_esecs);
+            sqlite3_int64 scheduled_time_esecs = chrono::duration_cast<chrono::seconds>(task.scheduled_time.time_since_epoch()).count();
+            sqlite3_bind_int64(update_db, 4, scheduled_time_esecs);
 
-        sqlite3_int64 time_executed_esecs = chrono::duration_cast<chrono::seconds>(sysclock_start.time_since_epoch()).count();
-        sqlite3_bind_int64(update_db, 5, time_executed_esecs);
+            sqlite3_int64 time_executed_esecs = chrono::duration_cast<chrono::seconds>(sysclock_start.time_since_epoch()).count();
+            sqlite3_bind_int64(update_db, 5, time_executed_esecs);
 
-        sqlite3_int64 run_time_ms = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_start).count();
-        sqlite3_bind_int64(update_db, 6, run_time_ms);
+            sqlite3_int64 run_time_ms = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_start).count();
+            sqlite3_bind_int64(update_db, 6, run_time_ms);
 
-        sqlite3_bind_int(update_db, 7, exit_status);
+            sqlite3_bind_int(update_db, 7, exit_status);
 
-        sqlite3_step(update_db);
+            sqlite3_step(update_db);
 
-        sqlite3_finalize(update_db);
+            sqlite3_finalize(update_db);
+        }
 
         return exit_status;
     }
@@ -331,7 +346,7 @@ int Agent::RunTask(const ScheduledTask& task)
          * *alloc without a matching free may look scary, but the memory needs to be valid for the entire runtime
          * of the child process and will be deallocated by the OS when the process finishes.
          *
-         * *alloc is guaranteed to fill the memory space with 0's, so there is no need to explicitly set the null terminator.
+         * `calloc` is guaranteed to fill the memory space with 0's, so there is no need to explicitly set the null terminator.
          * See: `man malloc`
          */
         const char **argv = (const char **)calloc(task.unit->arguments.size() + 2, sizeof(char*));
@@ -345,6 +360,7 @@ int Agent::RunTask(const ScheduledTask& task)
         // Launch Unit
         logger->LogTag(task.unit->name.c_str(), "Launching...");
 
+        task.unit->is_running = true;
         execv(task.unit->exec.c_str(), (char *const *)argv);
 
         logger->ErrorTag(task.unit->name.c_str(), "Unable to launch due to following error: `%s`", strerror(errno));
@@ -359,25 +375,14 @@ void Agent::LowPriorityRunner()
 
     lplog.Log("Low Priority Runner has started. %u task(s) in queue.", this->low_priority_queue.Count());
 
-    NysMqReceiver receiver(this->mission.broadcaster);
-
     while(true)
     {
-        auto message = receiver.Consume();
-        switch(message.type)
-        {
-            case MESSAGE_SHUTDOWN:
-                return;
-
-            default:
-                break;
-        }
+        if(!this->is_running) return;
 
         if(this->low_priority_queue.Count() <= 0)
         {
             std::unique_lock lk(this->low_priority_queue.m_queue);
             this->low_priority_queue.cv_queue.wait(lk);
-
             continue;
         }
 
@@ -402,6 +407,7 @@ void Agent::LowPriorityRunner()
         // If the trigger is close enough, run the task. Else, replace it in the queue and re-loop.
         if(next_task.scheduled_time <= chrono::system_clock::now() + chrono::seconds(30))
         {
+            // TODO: retry failed tasks
             this->RunTask(next_task);
 
             // Reschedule task
@@ -415,7 +421,7 @@ void Agent::LowPriorityRunner()
     }
 }
 
-int Agent::Run()
+AgentReturn Agent::Run()
 {
     logger->Log("Agent initializing...");
 
@@ -459,32 +465,40 @@ int Agent::Run()
     {
         NysMessage message = mq_receiver.ConsumeNext();
 
-        // Inform LPQ about the new message
-        this->low_priority_queue.Poke();
-
         switch(message.type)
         {
+            case MESSAGE_RELOAD:
             case MESSAGE_SHUTDOWN:
             {
                 logger->Log("Shutting down gracefully...");
+
+                this->is_running = false;
+
+                this->low_priority_queue.Poke();
+
                 lp_thread.join();
                 this->Cleanup();
 
-                return 0;
+                return message.type == MESSAGE_SHUTDOWN ? AGENT_SHUTDOWN : AGENT_RELOAD;
             }
 
-            case MESSAGE_NONE:
-            {
+            default:
                 break;
-            }
         }
     }
 }
 
 void Agent::Cleanup()
 {
+    this->is_running = false;
+
     if(this->database != nullptr)
     {
         sqlite3_close(this->database);
     }
+}
+
+Agent::~Agent()
+{
+    this->Cleanup();
 }

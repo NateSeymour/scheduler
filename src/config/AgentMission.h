@@ -2,8 +2,8 @@
 #define NOT_YOUR_SCHEDULER_AGENTMISSION_H
 
 #include <filesystem>
-#include "message/NysMqBroadcaster.h"
-#include "Logger.h"
+#include "../message/NysMqBroadcaster.h"
+#include "../Logger.h"
 
 struct AgentMission
 {

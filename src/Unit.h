@@ -36,7 +36,7 @@ struct Unit
 
     std::chrono::time_point<std::chrono::system_clock> last_executed;
 
-    std::atomic_bool is_running;
+    std::atomic_bool is_running = false;
     std::atomic_uint64_t pid;
 };
 

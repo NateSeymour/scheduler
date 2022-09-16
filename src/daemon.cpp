@@ -4,10 +4,12 @@
 #include <chrono>
 #include <thread>
 #include <csignal>
+#include <toml++/toml.h>
 #include "Agent.h"
 #include "Logger.h"
 #include "daemon.h"
 #include "ipc/IpcServer.h"
+#include "util/fs.h"
 
 namespace fs = std::filesystem;
 
@@ -28,36 +30,23 @@ void signal_handler(int signum)
     }
 }
 
-fs::path resolve_path(const std::vector<fs::path>& paths)
-{
-    for(auto const& path : paths)
-    {
-        if(fs::exists(path)) return path;
-    }
-
-    throw std::runtime_error("None of the paths exists!");
-}
-
 int main(int argc, const char **argv)
 {
-    // TODO: process config file
     // Setup mission config
     AgentMission mission;
-    mission.base = fs::path(std::getenv("HOME")) / ".nys";
+    mission.base = fs::path(std::getenv("HOME")) / ".nys"; // Default. Overridden by nys.toml
     mission.binary = argv[0];
-    mission.database_resources = resolve_path({
-             "/opt/homebrew/share/nys_scheduler/database",
-             "/usr/local/share/nys_scheduler/database",
-             "../database",
-             "./database"
-    });
-    mission.config = resolve_path({
-             "/opt/homebrew/etc/nys_scheduler/nys.toml",
-             "/usr/local/etc/nys_scheduler/nys.toml",
-             "../nys.toml",
-             "./nys.toml"
-    });
+    mission.database_resources = nys::fs::find_resource("share/database");
+    mission.config = nys::fs::find_resource("etc/nys.toml");
     mission.broadcaster = &nys::daemon::broadcaster;
+
+    // Process config file
+    auto config = toml::parse_file(mission.config.string());
+
+    if(config.at_path("mission.base").is_string())
+    {
+        mission.base = config.at_path("mission.base").as_string()->get();
+    }
 
     // Create directories
     std::vector<fs::path> required_dirs = {
@@ -85,9 +74,6 @@ int main(int argc, const char **argv)
     // Register signal handler
     std::signal(SIGTERM, signal_handler);
 
-    // Configure agent
-    Agent agent(mission);
-
     // Start IPC server
     logger.Log("Starting server...");
     IpcServer server;
@@ -99,15 +85,28 @@ int main(int argc, const char **argv)
      */
     while(true)
     {
+        // Configure agent
+        Agent agent(mission);
+
         try
         {
+            // Start agent
             logger.Log("Launching agent...");
-            agent.Run();
+
+            // Blocking
+            AgentReturn ret = agent.Run();
+
+            if(ret == AGENT_RELOAD)
+            {
+                logger.Log("Reloading agent after graceful shutdown...");
+                continue;
+            }
+
             return 0;
         }
         catch(std::exception& exception)
         {
-            // Free any still-allocated resources
+            // Ensure resources are deallocated
             agent.Cleanup();
 
             logger.Error("Agent has encountered the following unrecoverable error: %s", exception.what());

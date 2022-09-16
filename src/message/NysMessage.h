@@ -1,10 +1,12 @@
 #ifndef NOT_YOUR_SCHEDULER_NYSMESSAGE_H
 #define NOT_YOUR_SCHEDULER_NYSMESSAGE_H
 
-enum NysMessageType
+enum NysMessageType : uint8_t
 {
-    MESSAGE_NONE,
-    MESSAGE_SHUTDOWN
+    MESSAGE_NONE = 0,
+    MESSAGE_SHUTDOWN = 1,
+    MESSAGE_RELOAD = 2,
+    MESSAGE_NEW_CLIENT = 3
 };
 
 struct NysMessage
@@ -13,7 +15,8 @@ struct NysMessage
 
     union
     {
-        char shutdown_reason[100];
+        const char *shutdown_reason;
+        const char *reload_reason;
     };
 };
 
