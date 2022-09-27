@@ -18,6 +18,7 @@
 #include "../config/AgentMission.h"
 #include "../Logger.h"
 #include "IpcHeader.h"
+#include "IpcConnection.h"
 
 #define BACKLOG_MAX 10
 
@@ -39,60 +40,17 @@ private:
     int kq = -1;
     AgentMission mission;
 
-    std::vector<int> connections;
+    std::vector<std::unique_ptr<IpcConnection>> connections;
 
     std::unique_ptr<std::thread> connection_listener;
     std::unique_ptr<Logger> logger;
 
-    void ProcessClientMessage(int fd)
+    void HandleRequest(IpcConnection* fd) const
     {
-        /*
-         * We have to create a header_buffer to read into _and_ a packet object, instead of
-         * just reading directly into the packet object, because modern compilers will
-         * pad structures for optimized memory access/alignment.
-         */
-        IpcHeader header{};
-
-        char header_buffer[IPC_HEADER_SIZE];
-        memset(header_buffer, 0, IPC_HEADER_SIZE);
-
-        // Read the client's header
-        size_t bytes_in = read(fd, header_buffer, IPC_HEADER_SIZE);
-        if(bytes_in < 0)
-        {
-            this->logger->Error("The following error caused a dropped message from (%i): %s.", fd, strerror(errno));
-            return;
-        }
-
-        if(bytes_in < IPC_HEADER_SIZE)
-        {
-            this->logger->Error("Received invalid message from (%i): Incomplete header.", fd);
-            return;
-        }
-
-        // Populate header structure
-        memcpy(&header.magic, header_buffer, 6);
-        header.version = *(uint8_t*)(header_buffer + 6);
-        header.echo = ntohs(*(uint16_t*)(header_buffer + 7));
-        header.message_type = *(NysMessageType*)(header_buffer + 9);
-        header.body_length = ntohs(*(uint16_t*)(header_buffer + 10));
-
-        // Sanity checks
-        if(strncmp(header.magic, "NYSIPC", 6) != 0)
-        {
-            this->logger->Error("Received invalid message from (%i): Missing magic.", fd);
-            return;
-        }
-
-        // Sanity checks
-        if(header.version != 1)
-        {
-            this->logger->Error("Received invalid message from (%i): Unsupported protocol version %i.", fd, header.version);
-            return;
-        }
+        NysMessage message = fd->GetMessage();
 
         // Process message
-        switch(header.message_type)
+        switch(message.type)
         {
             /*
              * Relay message
@@ -100,59 +58,64 @@ private:
             case MESSAGE_SHUTDOWN:
             case MESSAGE_RELOAD:
             {
-                this->mission.broadcaster->Broadcast({
-                    .type = header.message_type
-                });
+                this->mission.broadcaster->Broadcast(message);
                 break;
             }
 
             /*
              * Ignore message
              */
+            case MESSAGE_TIMEOUT:
+            case MESSAGE_OK:
             case MESSAGE_NONE:
             case MESSAGE_NEW_CLIENT:
                 break;
         }
+
+        fd->SendMessage({
+                .type = MESSAGE_OK
+        });
     }
 
-    void CloseClientConnection(int fd)
+    void CloseClientConnection(IpcConnection* client)
     {
         /*
+         * We don't need to close the connection explicitly, because the connection
+         * deconstructor will do this for us.
+         *
          * We don't need to remove the connection from the kqueue explicitly, because
          * filters are automatically removed upon the last `close` of their associated
          * file descriptor. See `man kqueue`.
          */
-        close(fd);
 
-        auto it = std::remove_if(this->connections.begin(), this->connections.end(), [fd](int conn) {
-            return conn == fd;
+        this->logger->Log("Client disconnecting (%i). %i active clients.", client->GetFd(), this->connections.size() - 1);
+
+        auto it = std::remove_if(this->connections.begin(), this->connections.end(), [client](auto const& conn) {
+            return conn->GetFd() == client->GetFd();
         });
         this->connections.erase(it, this->connections.end());
-
-        this->logger->Log("Client disconnected (%i). %i active clients.", fd, this->connections.size());
     }
 
     void AcceptClient()
     {
-        int new_connection = accept(this->sockfd, nullptr, nullptr);
+        auto new_connection = std::make_unique<IpcConnection>(accept(this->sockfd, nullptr, nullptr));
 
-        if(new_connection == -1)
+        if(new_connection->GetFd() == -1)
         {
             this->logger->Error("WARN Problem accepting new client connection.");
             return;
         }
 
-        // Add new client to kqueue events
+        /*
+         * Add new client to kqueue events
+         * We supply the connection pointer (raw) to the `udata` argument
+         */
         struct kevent64_s conn_event{};
-        EV_SET64(&conn_event, new_connection, EVFILT_READ, EV_ADD | EV_EOF | EV_CLEAR, 0, 0, 0, 0, 0);
+        EV_SET64(&conn_event, new_connection->GetFd(), EVFILT_READ, EV_ADD | EV_EOF | EV_CLEAR, 0, 0, (uint64_t)new_connection.get(), 0, 0);
         kevent64(this->kq, &conn_event, 1, nullptr, 0, 0, nullptr);
 
-        this->connections.push_back(new_connection);
-
-        this->mission.broadcaster->Broadcast({
-            .type = MESSAGE_NEW_CLIENT
-        });
-        this->logger->Log("New connection received (%i). %i active clients.", new_connection, this->connections.size());
+        this->logger->Log("New connection received (%i). %i active clients.", new_connection->GetFd(), this->connections.size());
+        this->connections.push_back(std::move(new_connection));
     }
 
     int ProcessEvent(struct kevent64_s event)
@@ -174,17 +137,19 @@ private:
                 }
                 else // There is data to be read from one of the clients
                 {
-                    int client_fd = (int)event.ident;
+                    auto client = (IpcConnection*)event.udata;
+
+                    // Client has sent data
+                    if(event.data > 0)
+                    {
+                        this->HandleRequest(client);
+                    }
 
                     // Client has disconnected
                     if(event.flags & EV_EOF)
                     {
-                        this->CloseClientConnection(client_fd);
-                        break;
+                        this->CloseClientConnection(client);
                     }
-
-                    // Client has sent data
-                    this->ProcessClientMessage(client_fd);
                 }
                 break;
             }
@@ -244,9 +209,9 @@ public:
     {
         this->mission = server_mission;
 
-        std::filesystem::path socket_path = this->mission.base / "nys.sock";
+        std::filesystem::path socket_path = this->mission.config.base / "nys.sock";
 
-        this->logger = std::make_unique<Logger>("IpcServer", this->mission.base / "log" / "ipc_server.log");
+        this->logger = std::make_unique<Logger>("IpcServer", this->mission.config.base / "log" / "ipc_server.log");
 
         this->logger->Log("Initializing IPC server...");
 
@@ -317,12 +282,6 @@ public:
 
             this->connection_listener->join();
             close(this->kq);
-
-            // Close all server connections
-            for(auto const& conn : this->connections)
-            {
-                close(conn);
-            }
 
             // Close server socket and unlink socket from filesystem
             close(this->sockfd);

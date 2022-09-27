@@ -46,3 +46,11 @@ NYS has the ability to notify you or run specific `Unit`s when a job fails. This
 exec = "notify_failure.js"
 trigger = "on job_failure"
 ```
+
+## Installation
+
+NYS is installed using `brew`.
+
+```shell
+brew install nateseymour/nys/scheduler
+```

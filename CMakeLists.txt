@@ -6,8 +6,10 @@ set(CMAKE_CXX_STANDARD 20)
 include(FetchContent)
 
 # Libs
+## SQLite
 find_package(SQLite3 3.3 REQUIRED)
 
+## GTest
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
@@ -17,12 +19,19 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 option(INSTALL_GTEST "Enable installation of googletest." OFF)
 FetchContent_MakeAvailable(googletest)
 
+## TOML++
 FetchContent_Declare(
         tomlplusplus
         GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
         GIT_TAG        v3.2.0
 )
 FetchContent_MakeAvailable(tomlplusplus)
+
+## Json
+FetchContent_Declare(json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.2/json.tar.xz
+)
+FetchContent_MakeAvailable(json)
 
 # parser
 add_library(nys
@@ -53,8 +62,15 @@ add_library(nys
         src/ipc/IpcClient.h
         src/config/NysConfig.h
         src/util/fs.cpp
-        src/util/fs.h)
-target_link_libraries(nys PUBLIC tomlplusplus::tomlplusplus PRIVATE SQLite::SQLite3)
+        src/util/fs.h
+        src/config/NysConfig.cpp
+        src/nysctl.h
+        src/ipc/IpcHeader.cpp
+        src/Unit.cpp
+        src/ipc/IpcConnection.cpp
+        src/ipc/IpcConnection.h
+        src/format.h)
+target_link_libraries(nys PUBLIC nlohmann_json::nlohmann_json tomlplusplus::tomlplusplus PRIVATE SQLite::SQLite3)
 
 # NYS Daemon
 add_executable(nysd src/daemon.cpp)

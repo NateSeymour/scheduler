@@ -1,87 +1,56 @@
-#include <ncurses.h>
+#include <iostream>
+#include <filesystem>
+#include <cstring>
+#include "config/NysConfig.h"
+#include "Logger.h"
 #include "ipc/IpcClient.h"
 
-/*
- *  PID | UnitName | Status | Description
- */
-struct TableDefinition
+void print_usage()
 {
-    const char *header;
-    const int size;
-};
-
-static const TableDefinition table_defs[] = {
-        { "PID", 6 },
-        { "Name", 15 },
-        { "Status", 10 }, // RUNNING | STOPPED
-        { "Description", 20 }
-};
-
-static int SCREEN_WIDTH;
-static int SCREEN_HEIGHT;
-
-void create_help()
-{
-    mvaddstr(SCREEN_HEIGHT - 1, 0, "(h)elp, (l)ogs, (r)eload nysd, (k)ill unit, (s)tart unit, (i)nfo, (q)uit");
-    refresh();
+    std::cout << "Usage: nysctl <command> <subcommand>" << std::endl;
+    std::cout << "Valid commands: " << std::endl;
+    std::cout << "\treload   - Reloads `nysd` to reflect changes to units" << std::endl;
+    std::cout << "\tlist     - List all units and their current states" << std::endl;
+    std::cout << "\tversion  - Print version information" << std::endl;
+    std::cout << "\thelp     - Print this help text, or help information about <subcommand>" << std::endl;
 }
 
-void create_table_headers()
+int main(int argc, const char **argv)
 {
-    // Create table headers
-    int current_x = 0;
-    for(int i = 0; i < sizeof(table_defs); i++)
+    if(argc != 2)
     {
-        mvaddstr(0, current_x, table_defs[i].header);
-        current_x += table_defs[i].size;
+        print_usage();
+        return 1;
     }
 
-    refresh();
-}
+    // Get config
+    NysConfig config = NysConfig::FromEnv(argc, argv);
 
-void interactive()
-{
-    clear();
+    // Create required paths
+    std::filesystem::create_directories(config.base / "log");
 
-    create_help();
-    create_table_headers();
+    // Create logger
+    Logger logger("NysCtl", config.base / "log" / "nysctl.log");
 
-    IpcClient client;
-    client.Connect("/Users/nathan/.nys/nys.sock");
+    IpcClient client(config);
 
-    char ch;
-    while(true)
+    // Process command
+    const char *command = argv[1];
+
+    if(strcmp(command, "reload") == 0)
     {
-        ch = getch();
+        logger.Log("Reloading `nysd`...");
 
-        if(ch == 'q') break;
-        if(ch == 'r')
-        {
-            client.SendMessage({
-                .type = MESSAGE_RELOAD
-            });
-        }
+        auto response = client.GetConnection().Request({
+            .type = MESSAGE_RELOAD,
+            .value = {
+                    {"reason", "User requested reload via nysctl"}
+            }
+        }).get();
+
+        return 0;
     }
 
-    clear();
-}
-
-void init_curses()
-{
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    curs_set(0);
-
-    SCREEN_WIDTH = COLS;
-    SCREEN_HEIGHT = LINES;
-}
-
-int main()
-{
-    // Start
-    init_curses();
-    interactive();
-    return 0;
+    logger.Error("Unrecognized command: `%s`", command);
+    return 1;
 }

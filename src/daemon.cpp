@@ -1,15 +1,12 @@
-#include <cstdlib>
 #include <filesystem>
 #include <vector>
 #include <chrono>
 #include <thread>
 #include <csignal>
-#include <toml++/toml.h>
 #include "Agent.h"
 #include "Logger.h"
 #include "daemon.h"
 #include "ipc/IpcServer.h"
-#include "util/fs.h"
 
 namespace fs = std::filesystem;
 
@@ -20,7 +17,10 @@ void signal_handler(int signum)
         case SIGTERM:
         {
             NysMessage shutdown_message {
-                .type = MESSAGE_SHUTDOWN
+                .type = MESSAGE_SHUTDOWN,
+                .value = {
+                        {"reason", "SIGTERM"}
+                }
             };
             nys::daemon::broadcaster.Broadcast(shutdown_message);
         }
@@ -34,27 +34,16 @@ int main(int argc, const char **argv)
 {
     // Setup mission config
     AgentMission mission;
-    mission.base = fs::path(std::getenv("HOME")) / ".nys"; // Default. Overridden by nys.toml
-    mission.binary = argv[0];
-    mission.database_resources = nys::fs::find_resource("share/database");
-    mission.config = nys::fs::find_resource("etc/nys.toml");
+    mission.config = NysConfig::FromEnv(argc, argv);
     mission.broadcaster = &nys::daemon::broadcaster;
-
-    // Process config file
-    auto config = toml::parse_file(mission.config.string());
-
-    if(config.at_path("mission.base").is_string())
-    {
-        mission.base = config.at_path("mission.base").as_string()->get();
-    }
 
     // Create directories
     std::vector<fs::path> required_dirs = {
-            mission.base,
-            mission.base / "log",
-            mission.base / "schedule",
-            mission.base / "scripts",
-            mission.base / "workspace"
+            mission.config.base,
+            mission.config.base / "log",
+            mission.config.base / "schedule",
+            mission.config.base / "scripts",
+            mission.config.base / "workspace"
     };
 
     for(auto const& dir : required_dirs)
@@ -66,10 +55,10 @@ int main(int argc, const char **argv)
     }
 
     // Create logger
-    Logger logger("Daemon", mission.base / "log" / "daemon.log");
+    Logger logger("Daemon", mission.config.base / "log" / "daemon.log");
 
-    logger.Log("Daemon launched from `%s`", mission.binary.c_str());
-    logger.Log("Using `%s` as mission base.", mission.base.c_str());
+    logger.Log("Daemon launched from `%s`", mission.config.binary.c_str());
+    logger.Log("Using `%s` as mission base.", mission.config.base.c_str());
 
     // Register signal handler
     std::signal(SIGTERM, signal_handler);

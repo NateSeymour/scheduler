@@ -19,7 +19,7 @@ namespace chrono = std::chrono;
 void Agent::UpdateDatabase()
 {
     // Open / create database file
-    fs::path database_path = this->mission.base / "nys.db";
+    fs::path database_path = this->mission.config.base / "nys.db";
 
     if(sqlite3_open(database_path.c_str(), &this->database) != SQLITE_OK)
     {
@@ -36,7 +36,7 @@ void Agent::UpdateDatabase()
     sqlite3_finalize(stmt_get_version);
 
     // Load database schema info
-    fs::path schema_directory = this->mission.database_resources;
+    fs::path schema_directory = this->mission.config.database_resources;
     fs::path schema_info_file = schema_directory / "database.toml";
 
     toml::table schema_info = toml::parse_file(schema_info_file.c_str());
@@ -103,9 +103,9 @@ void Agent::LoadUnits()
 {
     std::vector<std::filesystem::path> unit_paths;
 
-    for(auto const& entry : fs::recursive_directory_iterator(this->mission.base / "schedule"))
+    for(auto const& entry : fs::recursive_directory_iterator(this->mission.config.base / "schedule"))
     {
-        if(entry.is_regular_file() && entry.path().extension() == ".unit")
+        if(entry.is_regular_file() && entry.path().extension() == ".toml")
         {
             logger->Log("Found: `%s`", entry.path().filename().c_str());
             unit_paths.push_back(entry.path());
@@ -139,9 +139,9 @@ void Agent::LoadUnits()
         // Resolve the exec command to scripts if it is not in path
         if(!fs::exists(unit->exec))
         {
-            if(fs::exists(this->mission.base / "scripts" / unit->exec))
+            if(fs::exists(this->mission.config.base / "scripts" / unit->exec))
             {
-                unit->exec = this->mission.base / "scripts" / unit->exec;
+                unit->exec = this->mission.config.base / "scripts" / unit->exec;
             }
             else
             {
@@ -327,7 +327,7 @@ int Agent::RunTask(const ScheduledTask& task)
     else // Child
     {
         // Redirect STDOUT and STDERR to log file
-        fs::path unit_log_path = this->mission.base / "log" / (task.unit->name + ".log");
+        fs::path unit_log_path = this->mission.config.base / "log" / (task.unit->name + ".log");
 
         logger->LogTag(task.unit->name.c_str(), "Logs for this unit can be found in %s.", unit_log_path.c_str());
 
@@ -335,7 +335,7 @@ int Agent::RunTask(const ScheduledTask& task)
         freopen(unit_log_path.c_str(), "a", stderr);
 
         // Set working directory
-        fs::path working_directory = this->mission.base / "workspace" / task.unit->name;
+        fs::path working_directory = this->mission.config.base / "workspace" / task.unit->name;
         fs::create_directories(working_directory);
         fs::current_path(working_directory);
 
@@ -371,7 +371,7 @@ int Agent::RunTask(const ScheduledTask& task)
 
 void Agent::LowPriorityRunner()
 {
-    Logger lplog("LPR", this->mission.base / "log" / "agent.log");
+    Logger lplog("LPR", this->mission.config.base / "log" / "agent.log");
 
     lplog.Log("Low Priority Runner has started. %u task(s) in queue.", this->low_priority_queue.Count());
 
@@ -470,7 +470,7 @@ AgentReturn Agent::Run()
             case MESSAGE_RELOAD:
             case MESSAGE_SHUTDOWN:
             {
-                logger->Log("Shutting down gracefully...");
+                logger->Log("Shutdown triggered for the following reason: %s. Shutting down gracefully...", message.value.value("reason", "None").c_str());
 
                 this->is_running = false;
 

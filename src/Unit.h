@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <chrono>
 #include <atomic>
+#include <nlohmann/json.hpp>
 
 enum UnitPriority
 {
@@ -38,6 +39,12 @@ struct Unit
 
     std::atomic_bool is_running = false;
     std::atomic_uint64_t pid;
+
+    nlohmann::json ToJson();
+    static Unit FromJson(const nlohmann::json& json);
 };
+
+const char *unit_priority_to_string(UnitPriority priority);
+const char *scheduling_behavior_to_string(SchedulingBehavior behavior);
 
 #endif //NOT_YOUR_SCHEDULER_UNIT_H

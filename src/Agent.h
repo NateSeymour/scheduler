@@ -45,7 +45,7 @@ public:
     void Cleanup();
     explicit Agent(AgentMission mission) : mission(std::move(mission))
     {
-        this->logger = std::make_unique<Logger>("Agent", this->mission.base / "log" / "agent.log");
+        this->logger = std::make_unique<Logger>("Agent", this->mission.config.base / "log" / "agent.log");
     }
     ~Agent();
 };
