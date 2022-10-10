@@ -63,11 +63,6 @@ int main(int argc, const char **argv)
     // Register signal handler
     std::signal(SIGTERM, signal_handler);
 
-    // Start IPC server
-    logger.Log("Starting server...");
-    IpcServer server;
-    server.StartServer(mission);
-
     /*
      * If the agent returns, then we allow the program to exit.
      * Otherwise, we attempt to restart.
@@ -76,9 +71,14 @@ int main(int argc, const char **argv)
     {
         // Configure agent
         Agent agent(mission);
+        IpcServer server(mission, agent);
 
         try
         {
+            // Start IPC server
+            logger.Log("Starting server...");
+            server.StartServer();
+
             // Start agent
             logger.Log("Launching agent...");
 
@@ -98,7 +98,7 @@ int main(int argc, const char **argv)
             // Ensure resources are deallocated
             agent.Cleanup();
 
-            logger.Error("Agent has encountered the following unrecoverable error: %s", exception.what());
+            logger.Error("Nysd has encountered the following unrecoverable error: %s", exception.what());
             logger.Error("Restarting in 10s...");
 
             std::this_thread::sleep_for(std::chrono::seconds(10));

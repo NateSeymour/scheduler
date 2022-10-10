@@ -51,6 +51,19 @@ int main(int argc, const char **argv)
         return 0;
     }
 
+    if(strcmp(command, "list") == 0)
+    {
+        logger.Log("Fetching status information from `nysd`...");
+
+        auto response = client.GetConnection().Request({
+            .type = MESSAGE_DESCRIBE_STATE
+        }).get();
+
+        std::cout << response.value.dump(4) << std::endl;
+
+        return 0;
+    }
+
     logger.Error("Unrecognized command: `%s`", command);
     return 1;
 }

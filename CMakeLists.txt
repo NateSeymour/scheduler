@@ -69,7 +69,7 @@ add_library(nys
         src/Unit.cpp
         src/ipc/IpcConnection.cpp
         src/ipc/IpcConnection.h
-        src/format.h)
+        src/format.h src/Codable.h)
 target_link_libraries(nys PUBLIC nlohmann_json::nlohmann_json tomlplusplus::tomlplusplus PRIVATE SQLite::SQLite3)
 
 # NYS Daemon

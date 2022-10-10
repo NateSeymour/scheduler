@@ -41,6 +41,8 @@ private:
     void LoadUnits();
 
 public:
+    const std::vector<std::shared_ptr<Unit>>& Units() const;
+
     AgentReturn Run();
     void Cleanup();
     explicit Agent(AgentMission mission) : mission(std::move(mission))

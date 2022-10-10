@@ -19,6 +19,7 @@
 #include "../Logger.h"
 #include "IpcHeader.h"
 #include "IpcConnection.h"
+#include "../Agent.h"
 
 #define BACKLOG_MAX 10
 
@@ -38,7 +39,8 @@ private:
     sockaddr_un addr;
     int sockfd = -1;
     int kq = -1;
-    AgentMission mission;
+    const AgentMission& mission;
+    const Agent& agent;
 
     std::vector<std::unique_ptr<IpcConnection>> connections;
 
@@ -60,6 +62,26 @@ private:
             {
                 this->mission.broadcaster->Broadcast(message);
                 break;
+            }
+
+            /*
+             * Handle message
+             */
+            case MESSAGE_DESCRIBE_STATE:
+            {
+                nlohmann::json response_body = nlohmann::json::object();
+                response_body["units"] = nlohmann::json::array();
+
+                for(auto const& unit : this->agent.Units())
+                {
+                    response_body["units"].push_back(unit->ToJson());
+                }
+
+                fd->SendMessage({
+                    .type = MESSAGE_DESCRIBE_STATE,
+                    .value = response_body
+                });
+                return;
             }
 
             /*
@@ -205,28 +227,9 @@ private:
     }
 
 public:
-    void StartServer(const AgentMission& server_mission)
+    void StartServer()
     {
-        this->mission = server_mission;
-
-        std::filesystem::path socket_path = this->mission.config.base / "nys.sock";
-
-        this->logger = std::make_unique<Logger>("IpcServer", this->mission.config.base / "log" / "ipc_server.log");
-
-        this->logger->Log("Initializing IPC server...");
-
-        // Set the socket address
-        memset(&this->addr, 0, sizeof(sockaddr_un));
-        this->addr.sun_family = PF_LOCAL;
-        this->addr.sun_len = strlen(socket_path.c_str()) + 1;
-
-        // see `man unix`
-        if(this->addr.sun_len > 104)
-        {
-            throw std::runtime_error("Socket path too long!");
-        }
-
-        memcpy(&this->addr.sun_path, socket_path.c_str(), this->addr.sun_len);
+        this->logger->Log("Starting IPC server...");
 
         // Create the socket
         this->sockfd = socket(PF_LOCAL, SOCK_STREAM, 0);
@@ -269,6 +272,28 @@ public:
         this->logger->Log("Listening for connections...");
 
         this->connection_listener = std::make_unique<std::thread>(&IpcServer::ConnectionListener, this);
+    }
+
+    IpcServer(const AgentMission& mission, const Agent& agent) : mission(mission), agent(agent)
+    {
+        std::filesystem::path socket_path = this->mission.config.base / "nys.sock";
+
+        this->logger = std::make_unique<Logger>("IpcServer", this->mission.config.base / "log" / "ipc_server.log");
+
+        this->logger->Log("Initializing IPC server...");
+
+        // Set the socket address
+        memset(&this->addr, 0, sizeof(sockaddr_un));
+        this->addr.sun_family = PF_LOCAL;
+        this->addr.sun_len = strlen(socket_path.c_str()) + 1;
+
+        // see `man unix`
+        if(this->addr.sun_len > 104)
+        {
+            throw std::runtime_error("Socket path too long!");
+        }
+
+        memcpy(&this->addr.sun_path, socket_path.c_str(), this->addr.sun_len);
     }
 
     ~IpcServer()

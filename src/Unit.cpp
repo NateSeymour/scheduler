@@ -19,11 +19,6 @@ nlohmann::json Unit::ToJson()
     return std::move(unit_json);
 }
 
-Unit Unit::FromJson(const nlohmann::json &json)
-{
-    return Unit();
-}
-
 const char *unit_priority_to_string(UnitPriority priority)
 {
     switch(priority)

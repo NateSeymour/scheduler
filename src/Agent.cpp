@@ -253,17 +253,20 @@ int Agent::RunTask(const ScheduledTask& task)
     auto sysclock_start = chrono::system_clock::now();
     auto clock_start = chrono::steady_clock::now();
 
-    pid_t child_pid = fork();
+    task.unit->pid = fork();
 
-    if(child_pid > 0) // Parent
+    if(task.unit->pid > 0) // Parent
     {
         // Wait for unit to end execution
         int stat_loc;
         struct rusage rusage{};
 
-        wait4(child_pid, &stat_loc, 0, &rusage);
+        task.unit->is_running = true;
+
+        wait4(task.unit->pid, &stat_loc, 0, &rusage);
 
         task.unit->is_running = false;
+        task.unit->pid = 0;
 
         // Measure execution time
         auto clock_end = chrono::steady_clock::now();
@@ -360,7 +363,6 @@ int Agent::RunTask(const ScheduledTask& task)
         // Launch Unit
         logger->LogTag(task.unit->name.c_str(), "Launching...");
 
-        task.unit->is_running = true;
         execv(task.unit->exec.c_str(), (char *const *)argv);
 
         logger->ErrorTag(task.unit->name.c_str(), "Unable to launch due to following error: `%s`", strerror(errno));
@@ -454,6 +456,8 @@ AgentReturn Agent::Run()
         }
     }
 
+    this->is_running = true;
+
     // Start LowPriorityRunner
     logger->Log("Starting Low Priority Runner...");
     std::thread lp_thread(&Agent::LowPriorityRunner, this);
@@ -501,4 +505,9 @@ void Agent::Cleanup()
 Agent::~Agent()
 {
     this->Cleanup();
+}
+
+const std::vector<std::shared_ptr<Unit>>& Agent::Units() const
+{
+    return std::ref(this->units);
 }

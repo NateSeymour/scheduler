@@ -7,6 +7,7 @@
 #include <chrono>
 #include <atomic>
 #include <nlohmann/json.hpp>
+#include "Codable.h"
 
 enum UnitPriority
 {
@@ -21,7 +22,7 @@ enum SchedulingBehavior
     SCHEDULING_STRICT
 };
 
-struct Unit
+struct Unit : public Encodable
 {
     std::filesystem::path path;
     std::string name;
@@ -38,10 +39,9 @@ struct Unit
     std::chrono::time_point<std::chrono::system_clock> last_executed;
 
     std::atomic_bool is_running = false;
-    std::atomic_uint64_t pid;
+    std::atomic_int pid;
 
-    nlohmann::json ToJson();
-    static Unit FromJson(const nlohmann::json& json);
+    nlohmann::json ToJson() override;
 };
 
 const char *unit_priority_to_string(UnitPriority priority);

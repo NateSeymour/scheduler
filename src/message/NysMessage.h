@@ -10,7 +10,8 @@ enum NysMessageType : uint8_t
     MESSAGE_RELOAD = 2,
     MESSAGE_NEW_CLIENT = 3,
     MESSAGE_TIMEOUT = 4,
-    MESSAGE_OK = 5
+    MESSAGE_OK = 5,
+    MESSAGE_DESCRIBE_STATE = 6
 };
 
 struct NysMessage
